@@ -1,0 +1,10 @@
+#!/bin/bash
+# NXEDC 舆情监测定时任务
+# 每2小时执行: 0,2,4,6,8,10,12,14,16,18,20,22 点
+
+PYTHON_PATH="/usr/bin/python3"
+SCRIPT_PATH="/Users/joe/CodeBuddy/nxedc_monitor.py"
+LOG_PATH="/Users/joe/CodeBuddy/nxedc_monitor.log"
+
+# 每2小时执行 (0,2,4,6,8,10,12,14,16,18,20,22 点)
+0 */2 * * * $PYTHON_PATH $SCRIPT_PATH >> $LOG_PATH 2>&1

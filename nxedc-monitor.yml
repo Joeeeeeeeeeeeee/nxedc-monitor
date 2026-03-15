@@ -1,0 +1,38 @@
+name: NXEDC 舆情监测
+
+on:
+  schedule:
+    # 每2小时执行一次 (0,2,4,6,8,10,12,14,16,18,20,22点)
+    - cron: '0 */2 * * *'
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Run NXEDC Monitor
+        env:
+          SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: python nxedc_monitor.py
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxedc-report
+          path: nxedc_sentiment_report.md

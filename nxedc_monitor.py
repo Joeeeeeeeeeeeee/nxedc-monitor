@@ -3,12 +3,13 @@ import requests
 import smtplib
 import ssl
 import os
+import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from xml.etree import ElementTree
 
-REDDIT_SEARCH_URL = "https://www.reddit.com/r/fidgettoys/search.json"
-QUERY = "nxedc"
+REDDIT_RSS_URL = "https://www.reddit.com/r/fidgettoys/search.rss?q=nxedc"
 
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
@@ -18,10 +19,7 @@ RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL", "559@cometspark.cc")
 
 print(f"开始监测... {datetime.now()}")
 
-HEADERS = {
-    "User-Agent": "NXEDC-Monitor/1.0",
-    "Accept": "application/json"
-}
+HEADERS = {"User-Agent": "NXEDC-Monitor/1.0"}
 
 def translate(text):
     if not text: return ""
@@ -35,26 +33,35 @@ def translate(text):
     return text
 
 def search_posts():
-    print("搜索Reddit...")
+    print("搜索Reddit RSS...")
     try:
-        r = requests.get(REDDIT_SEARCH_URL, headers=HEADERS, params={"q": QUERY, "sort": "new", "limit": 25}, timeout=30)
+        r = requests.get(REDDIT_RSS_URL, headers=HEADERS, timeout=30)
         print(f"状态码: {r.status_code}")
-        print(f"响应内容: {r.text[:200]}")
         if r.status_code == 200:
-            data = r.json()
-            children = data.get("data", {}).get("children", [])
-            print(f"找到 {len(children)} 个帖子")
-            return [c.get("data", {}) for c in children]
+            posts = []
+            try:
+                root = ElementTree.fromstring(r.text)
+                for entry in root.findall(".//entry"):
+                    title = entry.find("title").text if entry.find("title") is not None else ""
+                    link = entry.find("link").get("href") if entry.find("link") is not None else ""
+                    author = entry.find("author/name").text if entry.find("author/name") is not None else "unknown"
+                    published = entry.find("published").text if entry.find("published") is not None else ""
+                    # 从 URL 提取 post ID
+                    post_id = re.search(r"/comments/([a-z0-9]+)", link).group(1) if "/comments/" in link else ""
+                    posts.append({
+                        "title": title,
+                        "link": link,
+                        "author": author,
+                        "published": published,
+                        "id": post_id
+                    })
+                print(f"找到 {len(posts)} 个帖子")
+                return posts
+            except Exception as e:
+                print(f"解析RSS错误: {e}")
+                print(f"响应内容: {r.text[:500]}")
     except Exception as e:
         print(f"搜索错误: {e}")
-    return []
-
-def get_comments(post_id):
-    try:
-        r = requests.get(f"https://www.reddit.com/r/fidgettoys/comments/{post_id}.json", headers=HEADERS, timeout=30)
-        if r.status_code == 200:
-            return r.json()[1]["data"]["children"]
-    except: pass
     return []
 
 def send_email(body):
@@ -85,14 +92,8 @@ def main():
         report.append(f"\n## {title_zh}")
         report.append(f"原文: {title}")
         report.append(f"发帖人: {p.get('author')}")
-        report.append(f"链接: https://reddit.com{p.get('permalink')}")
-        
-        comments = get_comments(p.get("id"))
-        nxedc_cmts = [c["data"] for c in comments if "nxedc" in c["data"].get("body", "").lower()]
-        if nxedc_cmts:
-            report.append(f"\n### 相关评论:")
-            for c in nxedc_cmts[:5]:
-                report.append(f"- {c.get('author')}: {translate(c.get('body', ''))}")
+        report.append(f"发布时间: {p.get('published', '')}")
+        report.append(f"链接: {p.get('link', '')}")
     
     send_email("\n".join(report))
 

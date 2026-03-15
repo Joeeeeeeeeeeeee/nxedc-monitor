@@ -37,29 +37,49 @@ def search_posts():
     try:
         r = requests.get(REDDIT_RSS_URL, headers=HEADERS, timeout=30)
         print(f"状态码: {r.status_code}")
+        print(f"响应长度: {len(r.text)}")
+        
+        # 打印前500字符用于调试
+        print(f"响应内容: {r.text[:500]}")
+        
         if r.status_code == 200:
             posts = []
             try:
-                root = ElementTree.fromstring(r.text)
-                for entry in root.findall(".//entry"):
-                    title = entry.find("title").text if entry.find("title") is not None else ""
-                    link = entry.find("link").get("href") if entry.find("link") is not None else ""
-                    author = entry.find("author/name").text if entry.find("author/name") is not None else "unknown"
-                    published = entry.find("published").text if entry.find("published") is not None else ""
+                # 修复命名空间问题
+                xml = r.text.replace("xmlns", "ns")
+                root = ElementTree.fromstring(xml)
+                
+                # 尝试不同的标签名
+                entries = root.findall(".//entry")
+                if not entries:
+                    entries = root.findall(".//{http://www.w3.org/2005/Atom}entry")
+                
+                print(f"找到 {len(entries)} 个条目")
+                
+                for entry in entries:
+                    # 尝试不同的标签名
+                    title_el = entry.find("title") or entry.find("{http://www.w3.org/2005/Atom}title")
+                    link_el = entry.find("link") or entry.find("{http://www.w3.org/2005/Atom}link")
+                    author_el = entry.find("author/name") or entry.find("{http://www.w3.org/2005/Atom}author/{http://www.w3.org/2005/Atom}name")
+                    
+                    title = title_el.text if title_el is not None else ""
+                    link = link_el.get("href") if link_el is not None else ""
+                    author = author_el.text if author_el is not None else "unknown"
+                    
                     # 从 URL 提取 post ID
-                    post_id = re.search(r"/comments/([a-z0-9]+)", link).group(1) if "/comments/" in link else ""
+                    match = re.search(r"/comments/([a-z0-9]+)", link)
+                    post_id = match.group(1) if match else ""
+                    
                     posts.append({
                         "title": title,
                         "link": link,
                         "author": author,
-                        "published": published,
                         "id": post_id
                     })
-                print(f"找到 {len(posts)} 个帖子")
+                print(f"解析到 {len(posts)} 个帖子")
                 return posts
             except Exception as e:
-                print(f"解析RSS错误: {e}")
-                print(f"响应内容: {r.text[:500]}")
+                print(f"解析错误: {e}")
     except Exception as e:
         print(f"搜索错误: {e}")
     return []
@@ -92,7 +112,6 @@ def main():
         report.append(f"\n## {title_zh}")
         report.append(f"原文: {title}")
         report.append(f"发帖人: {p.get('author')}")
-        report.append(f"发布时间: {p.get('published', '')}")
         report.append(f"链接: {p.get('link', '')}")
     
     send_email("\n".join(report))

@@ -7,7 +7,7 @@ import re
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
-from xml.etree import ElementTree
+from html import unescape
 
 REDDIT_RSS_URL = "https://www.reddit.com/r/fidgettoys/search.rss?q=nxedc"
 
@@ -36,50 +36,44 @@ def search_posts():
     print("搜索Reddit RSS...")
     try:
         r = requests.get(REDDIT_RSS_URL, headers=HEADERS, timeout=30)
-        print(f"状态码: {r.status_code}")
-        print(f"响应长度: {len(r.text)}")
-        
-        # 打印前500字符用于调试
-        print(f"响应内容: {r.text[:500]}")
+        print(f"状态码: {r.status_code}, 长度: {len(r.text)}")
         
         if r.status_code == 200:
             posts = []
-            try:
-                # 修复命名空间问题
-                xml = r.text.replace("xmlns", "ns")
-                root = ElementTree.fromstring(xml)
+            text = r.text
+            
+            # 使用正则表达式提取 entry
+            entry_pattern = r'<entry>(.*?)</entry>'
+            entries = re.findall(entry_pattern, text, re.DOTALL)
+            print(f"找到 {len(entries)} 个条目")
+            
+            for entry in entries:
+                # 提取 title
+                title_match = re.search(r'<title>([^<]+)</title>', entry)
+                title = unescape(title_match.group(1)) if title_match else ""
                 
-                # 尝试不同的标签名
-                entries = root.findall(".//entry")
-                if not entries:
-                    entries = root.findall(".//{http://www.w3.org/2005/Atom}entry")
+                # 提取 link
+                link_match = re.search(r'<link href="([^"]+)"', entry)
+                link = link_match.group(1) if link_match else ""
                 
-                print(f"找到 {len(entries)} 个条目")
+                # 提取 author
+                author_match = re.search(r'<author><name>([^<]+)</name></author>', entry)
+                author = author_match.group(1) if author_match else "unknown"
                 
-                for entry in entries:
-                    # 尝试不同的标签名
-                    title_el = entry.find("title") or entry.find("{http://www.w3.org/2005/Atom}title")
-                    link_el = entry.find("link") or entry.find("{http://www.w3.org/2005/Atom}link")
-                    author_el = entry.find("author/name") or entry.find("{http://www.w3.org/2005/Atom}author/{http://www.w3.org/2005/Atom}name")
-                    
-                    title = title_el.text if title_el is not None else ""
-                    link = link_el.get("href") if link_el is not None else ""
-                    author = author_el.text if author_el is not None else "unknown"
-                    
-                    # 从 URL 提取 post ID
-                    match = re.search(r"/comments/([a-z0-9]+)", link)
-                    post_id = match.group(1) if match else ""
-                    
+                # 提取 id
+                id_match = re.search(r'<id>([^<]+)</id>', entry)
+                post_id = id_match.group(1) if id_match else ""
+                
+                if title:
                     posts.append({
                         "title": title,
                         "link": link,
                         "author": author,
                         "id": post_id
                     })
-                print(f"解析到 {len(posts)} 个帖子")
-                return posts
-            except Exception as e:
-                print(f"解析错误: {e}")
+            
+            print(f"解析到 {len(posts)} 个帖子")
+            return posts
     except Exception as e:
         print(f"搜索错误: {e}")
     return []

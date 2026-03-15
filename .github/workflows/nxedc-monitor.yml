@@ -1,4 +1,4 @@
-name: NXEDC 舆情监测
+name: NXEDC Monitor
 
 on:
   schedule:

@@ -11,7 +11,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 
-REDDIT_SEARCH_URL = "https://www.reddit.com/r/fidgettoys/search/.json"
+REDDIT_SEARCH_URL = "https://www.reddit.com/r/fidgettoys/search.json"
 QUERY = "nxedc"
 OUTPUT_FILE = "nxedc_sentiment_report.md"
 
